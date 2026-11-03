@@ -14,6 +14,7 @@ ollama-modelfile-linter-cli/
 ├── README.md                        # usage, rules table, credits
 ├── STATUS.md                        # this file
 ├── pyproject.toml                   # packaging + console script entry point
+├── .gitignore
 ├── modelfile_lint/
 │   ├── __init__.py                  # version
 │   ├── cli.py                       # argparse CLI (text/json, --fix, --min-severity, stdin)
@@ -22,7 +23,7 @@ ollama-modelfile-linter-cli/
 │   └── models.py                    # Finding, Instruction, Modelfile data models
 └── tests/
     ├── __init__.py
-    └── test_lint.py                 # 24 unit tests (parser, rules, fixer, CLI)
+    └── test_lint.py                 # 29 unit tests (parser, rules, fixer, CLI)
 ```
 
 Lint rules:
@@ -73,9 +74,10 @@ modelfile-lint --fix Modelfile                 # apply suggested fixes in place
 
 ## Verification results
 
-- `python3 -m unittest discover -s tests -v`: **24/24 tests OK** (parser,
+- `python3 -m unittest discover -s tests -v`: **29/29 tests OK** (parser,
   all lint rules including parameter ranges, auto-fix application, CLI exit
-  codes, text/JSON output, stdin handling).
+  codes, text/JSON output, stdin handling, multi-line and single-quote fenced
+  blocks, `--fix` in place, unreadable-file handling).
 - Manual CLI checks:
   - `tests/fixtures/bad.modelfile` → exit 1, reports MOD002/MOD003/MOD004/MOD005/MOD006
   - `tests/fixtures/valid.modelfile` → exit 0, silent
@@ -83,19 +85,24 @@ modelfile-lint --fix Modelfile                 # apply suggested fixes in place
     findings (non-numeric values, unknown instructions) are left untouched
   - `--format json` emits valid JSON with file + findings
   - stdin mode works; console-script entry point `modelfile-lint` installs and runs
+  - Unreadable files are reported to stderr with exit 1 instead of crashing
+- Packaging: `pip install .` succeeds and the `modelfile-lint` console script
+  runs correctly (verified then uninstalled to keep the environment clean).
 
 ## Known gaps
 
-- `'''` (single-quote) fenced blocks are not parsed; only `"""` fences are.
 - `--fix` only applies findings with a deterministic replacement (uppercase
   instructions, clamped parameter values, trailing newline). Non-numeric
   values and unknown instructions are reported but not auto-fixed.
-- Multi-file `--fix` stops at the first unreadable file (unhandled exception).
+- `--fix` does not re-apply fixes after re-linting, so a second pass is needed
+  if a fix would surface a new finding (rare).
 - No test framework is pinned in `pyproject.toml` (`pytest` listed only under
   `[project.optional-dependencies] dev`); tests run with stdlib `unittest`.
 - Packaging install requires `--break-system-packages` on PEP 668-managed
   Python installations (environment limitation, not a code issue).
 - No integration with a running Ollama server; this lints files only.
+- Some Ollama parameters (e.g. `stop`, `num_gqa`, `rope_frequency_base`) are
+  not range-checked; they are accepted as-is.
 
 ## Credits
 

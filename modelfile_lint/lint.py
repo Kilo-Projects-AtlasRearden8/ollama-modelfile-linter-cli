@@ -45,6 +45,39 @@ PARAMETER_RULES: dict[str, ParameterRule] = {
 
 FENCED_INSTRUCTIONS = frozenset({"TEMPLATE", "SYSTEM", "LICENSE"})
 
+FENCE_MARKERS = ('"""', "'''")
+
+
+def _is_fenced(args: str) -> Optional[str]:
+    """Return the fence marker if ``args`` opens a fenced block, else None."""
+    for marker in FENCE_MARKERS:
+        if args.startswith(marker):
+            return marker
+    return None
+
+
+def _close_fence(lines: list[str], start: int, n: int, marker: str, initial: str = "") -> tuple[str, int]:
+    """Read a fenced block from ``lines[start+1:]`` until the closing fence.
+
+    ``initial`` is content already gathered from the opening line. Returns the
+    block content and the index of the closing line. If no closing fence is
+    found, consumes to the end of the file.
+    """
+    content = initial
+    j = start
+    closed = False
+    while j < n:
+        if marker in lines[j]:
+            before, _ = lines[j].split(marker, 1)
+            content += before
+            closed = True
+            break
+        content += "\n" + lines[j]
+        j += 1
+    if not closed:
+        j = n - 1
+    return content, j
+
 
 def replacement_line(keyword: str, args: str) -> str:
     """Return a normalized instruction line text."""
@@ -71,28 +104,18 @@ def parse(text: str, path: str = "<stdin>") -> Modelfile:
         upper = keyword.upper()
         instruction = Instruction(line=line_no, keyword=upper, raw=keyword, args=args)
 
-        if upper in FENCED_INSTRUCTIONS and args.startswith('"""'):
-            if args.count('"""') >= 2:
-                # Single-line fenced block: SYSTEM """text here."""
-                content = args[3:].split('"""', 1)[0]
-                instruction.block = content
-            else:
-                # Multi-line fenced block, closing """ on a later line.
-                content = args[3:]
-                j = i + 1
-                closed = False
-                while j < n:
-                    if '"""' in lines[j]:
-                        before, _ = lines[j].split('"""', 1)
-                        content += before
-                        closed = True
-                        i = j
-                        break
-                    content += "\n" + lines[j]
-                    j += 1
-                if not closed:
-                    i = n - 1
-                instruction.block = content
+        if upper in FENCED_INSTRUCTIONS:
+            marker = _is_fenced(args)
+            if marker is not None:
+                if args.count(marker) >= 2:
+                    # Single-line fenced block: SYSTEM """text here."""
+                    content = args[len(marker):].split(marker, 1)[0]
+                    instruction.block = content
+                else:
+                    # Multi-line fenced block, closing fence on a later line.
+                    content = args[len(marker):]
+                    content, i = _close_fence(lines, i + 1, n, marker, initial=content)
+                    instruction.block = content
         mf.instructions.append(instruction)
         i += 1
     return mf

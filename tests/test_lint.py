@@ -38,6 +38,20 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(len(mf.instructions), 1)
         self.assertEqual(mf.instructions[0].keyword, "FROM")
 
+    def test_parses_multi_line_template_block(self):
+        text = 'FROM llama3\nTEMPLATE """Hello {{ .Name }}!\nThis is line two."""\n'
+        mf = parse(text, "x")
+        template = next(i for i in mf.instructions if i.keyword == "TEMPLATE")
+        self.assertIsNotNone(template.block)
+        self.assertIn("Hello {{ .Name }}!", template.block)
+        self.assertIn("This is line two.", template.block)
+
+    def test_parses_single_quote_fenced_block(self):
+        text = "FROM llama3\nSYSTEM '''You are helpful.'''\n"
+        mf = parse(text, "x")
+        system = next(i for i in mf.instructions if i.keyword == "SYSTEM")
+        self.assertEqual(system.block, "You are helpful.")
+
 
 class LintTests(unittest.TestCase):
     def findings(self, text: str, path: str = "<test>"):
@@ -146,29 +160,32 @@ class FixTests(unittest.TestCase):
 class CliTests(unittest.TestCase):
     def run_cli(self, *args, stdin=None):
         old_stdout, old_stdin = sys.stdout, sys.stdin
+        old_stderr = sys.stderr
         sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
         if stdin is not None:
             sys.stdin = io.StringIO(stdin)
         try:
             code = main(list(args))
             output = sys.stdout.getvalue()
+            error = sys.stderr.getvalue()
         finally:
-            sys.stdout, sys.stdin = old_stdout, old_stdin
-        return code, output
+            sys.stdout, sys.stderr, sys.stdin = old_stdout, old_stderr, old_stdin
+        return code, output, error
 
     def test_cli_valid_file(self):
-        code, output = self.run_cli(os.path.join(FIXTURES, "valid.modelfile"))
+        code, output, _ = self.run_cli(os.path.join(FIXTURES, "valid.modelfile"))
         self.assertEqual(code, 0)
         self.assertEqual(output.strip(), "")
 
     def test_cli_bad_file(self):
-        code, output = self.run_cli(os.path.join(FIXTURES, "bad.modelfile"))
+        code, output, _ = self.run_cli(os.path.join(FIXTURES, "bad.modelfile"))
         self.assertEqual(code, 1)
         self.assertIn("MOD005", output)
         self.assertIn("MOD003", output)
 
     def test_cli_json_format(self):
-        code, output = self.run_cli(
+        code, output, _ = self.run_cli(
             "--format", "json", os.path.join(FIXTURES, "bad.modelfile")
         )
         payload = json.loads(output)
@@ -178,19 +195,49 @@ class CliTests(unittest.TestCase):
         self.assertIn("MOD003", codes)
 
     def test_cli_stdin(self):
-        code, output = self.run_cli(stdin="from llama3\nPARAMETER temperature 0.7\n")
+        code, output, _ = self.run_cli(stdin="from llama3\nPARAMETER temperature 0.7\n")
         self.assertEqual(code, 0)
         self.assertIn("MOD005", output)
 
     def test_cli_min_severity(self):
-        code, output = self.run_cli(
+        code, output, _ = self.run_cli(
             "--min-severity", "error", os.path.join(FIXTURES, "bad.modelfile")
         )
         self.assertNotIn("MOD005", output)
 
     def test_cli_no_files_reads_stdin(self):
-        code, output = self.run_cli(stdin="FROM llama3\n")
+        code, output, _ = self.run_cli(stdin="FROM llama3\n")
         self.assertEqual(code, 0)
+
+    def test_cli_fix_applies_in_place(self):
+        path = os.path.join(FIXTURES, "fixme.modelfile")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("from llama3\nPARAMETER temperature 3.0\n")
+        try:
+            code, output, _ = self.run_cli("--fix", path)
+            self.assertEqual(code, 0)
+            with open(path, "r", encoding="utf-8") as handle:
+                fixed = handle.read()
+            self.assertEqual(fixed.split("\n")[0], "FROM llama3")
+            self.assertIn("PARAMETER temperature 2", fixed.split("\n")[1])
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
+    def test_cli_json_includes_codes(self):
+        code, output, _ = self.run_cli(
+            "--format", "json", os.path.join(FIXTURES, "bad.modelfile")
+        )
+        payload = json.loads(output)
+        codes = {f["code"] for f in payload[0]["findings"]}
+        self.assertIn("MOD003", codes)
+        self.assertIn("MOD005", codes)
+        self.assertEqual(payload[0]["file"], os.path.join(FIXTURES, "bad.modelfile"))
+
+    def test_cli_unreadable_file_reports_error(self):
+        code, output, error = self.run_cli("/nonexistent/no-such-file.modelfile")
+        self.assertEqual(code, 1)
+        self.assertIn("cannot read", error)
 
 
 if __name__ == "__main__":

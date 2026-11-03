@@ -68,11 +68,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     for target in targets:
         if target == "-":
-            text = sys.stdin.read()
+            try:
+                text = sys.stdin.read()
+            except OSError as exc:
+                print(f"modelfile-lint: error reading stdin: {exc}", file=sys.stderr)
+                return 1
             path = "<stdin>"
         else:
-            with open(target, "r", encoding="utf-8") as handle:
-                text = handle.read()
+            try:
+                with open(target, "r", encoding="utf-8") as handle:
+                    text = handle.read()
+            except OSError as exc:
+                print(f"modelfile-lint: cannot read {target}: {exc}", file=sys.stderr)
+                had_error = True
+                results.append((target, []))
+                continue
             path = target
 
         findings = _lint_text(text, path)
@@ -86,7 +96,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             with open(target, "w", encoding="utf-8") as handle:
                 handle.write(text)
             # Re-lint after fixing so output reflects the patched file.
-            findings = [f for f in _lint_text(text, path) if SEVERITY_ORDER[f.severity] >= min_level]
+            findings = [f for f in _lint_text(text, path) if SEVERITY_ORDER[f.severity] <= min_level]
             if any(f.severity == "error" for f in findings):
                 had_error = True
 

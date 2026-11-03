@@ -1,41 +1,66 @@
 # modelfile-lint
 
-Local-first CLI linter for Ollama Modelfiles. Checks parameter ranges,
-valid instructions, and readable formatting, and offers suggested fixes.
-No keys, no network, no secrets — everything runs on your machine.
+A friendly, local-first command-line tool that checks your Ollama Modelfiles
+for best practices — valid instructions, sensible parameter ranges, and clean
+formatting — and offers suggested fixes you can apply automatically.
 
 Built and maintained by [Asdale Dynamics, LLC](https://dylanasdale.github.io).
 
+## Who this is for
+
+If you're running Ollama locally and writing Modelfiles by hand, this tool is
+for you. It catches common mistakes (a lowercase `from`, a `temperature` set
+higher than 2, a missing `FROM` line, a file without a trailing newline) before
+they cause confusing behavior. No account, no API key, no internet connection
+needed — everything runs right on your own computer.
+
 ## What it checks
 
-| Code | Severity | Check |
-|------|----------|-------|
-| MOD001 | error | Missing required `FROM` instruction |
-| MOD002 | warning | Unknown instruction |
-| MOD003 | warning/error | Parameter value outside its valid range (or not a number) |
-| MOD004 | info | Duplicate parameter (last value wins) |
-| MOD005 | suggestion | Instruction should be uppercase |
-| MOD006 | suggestion | File does not end with a newline |
-| MOD007 | warning | `FROM` appears more than once |
+| Code | Severity | What it means |
+|------|----------|---------------|
+| MOD001 | error | Your Modelfile is missing the required `FROM` instruction. |
+| MOD002 | warning | An instruction isn't one Ollama recognizes. |
+| MOD003 | warning/error | A `PARAMETER` value is out of range, or not a number. |
+| MOD004 | info | The same parameter appears more than once (the last value wins). |
+| MOD005 | suggestion | An instruction should be uppercase (e.g. `from` → `FROM`). |
+| MOD006 | suggestion | The file doesn't end with a newline. |
+| MOD007 | warning | `FROM` appears more than once (only the first is used). |
 
-Supported parameter ranges include `temperature` (0–2), `top_p` (0–1),
-`top_k`, `repeat_penalty`, `num_ctx`, `num_predict`, `num_gpu`,
-`num_thread`, `mirostat` (0/1/2), `mirostat_eta`, `mirostat_tau`,
-`num_keep`, `num_seq`, `tfs_z`, `typical_p`, `presence_penalty`
-(-2–2), and `frequency_penalty` (-2–2).
+Parameter ranges checked:
+
+- `temperature`: 0 to 2
+- `top_p`: 0 to 1
+- `top_k`: 0 or higher
+- `repeat_penalty`: 0 or higher
+- `seed`: any integer
+- `num_ctx`: 0 or higher
+- `num_predict`: -1 or higher
+- `num_gpu`: 0 or higher
+- `num_thread`: 0 or higher
+- `mirostat`: 0, 1, or 2
+- `mirostat_eta`: greater than 0
+- `mirostat_tau`: 0 or higher
+- `num_keep`: 0 or higher
+- `num_seq`: 1 or higher
+- `tfs_z`: 0 or higher
+- `typical_p`: greater than 0
+- `presence_penalty`: -2 to 2
+- `frequency_penalty`: -2 to 2
 
 ## Install
 
+From this folder:
+
 ```bash
-git clone https://github.com/dylanasdale/ollama-modelfile-linter-cli.git
-cd ollama-modelfile-linter-cli
 pip install .
 ```
+
+(On some systems you may need `pip install --break-system-packages .`.)
 
 Or run without installing:
 
 ```bash
-python -m modelfile_lint.cli Modelfile
+python3 -m modelfile_lint.cli Modelfile
 ```
 
 ## Usage
@@ -53,13 +78,13 @@ Lint from stdin:
 cat Modelfile | modelfile-lint
 ```
 
-JSON output (useful for editors and CI):
+JSON output (handy for editors and other tools):
 
 ```bash
 modelfile-lint --format json Modelfile
 ```
 
-Report only errors and warnings:
+Report only errors and warnings (hide info and suggestions):
 
 ```bash
 modelfile-lint --min-severity warning Modelfile
@@ -85,16 +110,21 @@ PARAMETER temperature 3.0
 Running `modelfile-lint Modelfile` reports:
 
 ```
-Modelfile:1: MOD005 suggestion: Instruction 'from' should be uppercase 'FROM'.  -> FROM
+Modelfile:1: MOD005 suggestion: Instruction 'from' should be uppercase 'FROM'.  -> FROM llama3
 Modelfile:2: MOD003 warning: Parameter 'temperature'=3.0 exceeds maximum 2.0.  -> PARAMETER temperature 2
 ```
 
-Run `modelfile-lint --fix Modelfile` to apply the suggested replacements.
+Run `modelfile-lint --fix Modelfile` and the file is rewritten to:
+
+```dockerfile
+FROM llama3
+PARAMETER temperature 2
+```
 
 ## Local-first
 
-This tool never contacts the network, never reads or writes API keys, and
-never sends your Modelfiles anywhere. All checks happen locally.
+This tool never contacts the network, never reads or writes API keys, and never
+sends your Modelfiles anywhere. All checks happen on your machine.
 
 ## License
 
