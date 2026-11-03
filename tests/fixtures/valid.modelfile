@@ -1,0 +1,10 @@
+FROM llama3
+
+PARAMETER temperature 0.7
+PARAMETER num_ctx 4096
+PARAMETER top_p 0.9
+PARAMETER mirostat 2
+
+TEMPLATE """{{ .Prompt }}"""
+SYSTEM """You are a helpful assistant."""
+MESSAGE user "Hello"

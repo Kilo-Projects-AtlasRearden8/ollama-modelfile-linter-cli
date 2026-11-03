@@ -1,0 +1,9 @@
+from llama3
+PARAMETER temperature 3.0
+PARAMETER top_p 1.5
+PARAMETER num_predict -5
+PARAMETER mirostat 5
+PARAMETER seed notanumber
+PARAMETER temperature 0.5
+unknown_instruction foo
+MESSAGE user no newline at end
